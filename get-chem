@@ -1,0 +1,587 @@
+<?php
+
+/**
+ * @name GetChem
+ * @author  Dimitar Kokov - dm.kokov@gmail.com
+ */
+
+
+class GetChem {
+
+    var $db;
+    var $db_table;
+    var $config;
+    var $timer;
+    var $input_values;
+    var $combinations_array;
+    var $combinations_string;
+    var $combinations_count;
+    var $benchmark_data;
+    var $predictions;
+    var $allowed_actions;
+    var $norm;
+
+    function __construct($allowed_actions) {
+
+        $this->load_config();
+
+        $this->allowed_actions = array_values(array_diff($allowed_actions, ['__construct']));
+        array_unshift($this->allowed_actions, "dummy");
+        unset($this->allowed_actions[0]);
+
+        $this->db = new mysqli($this->config['db_host'], $this->config['db_username'], $this->config['db_password'], $this->config['db_name']);
+        // Check connection
+        if ($this->db->connect_error) {
+            echo "Database connection failed: " . $this->db->connect_error . "\n\n";
+            exit;
+        }
+
+        // get DB table name from user
+        echo "\n\033[33mPlease enter Database table name for this experiment.\nTable name: \033[0m";
+        $input = fgets(STDIN);
+        $table = trim($input);
+
+        $table_exists = false;
+        if ($result = $this->db->query("SHOW TABLES LIKE '".$table."'")) {
+            $table_exists = ($result->num_rows == 1);
+        }
+        if(!$table_exists) {
+
+            // create a db table with column for each input and output variable
+            $sql = "CREATE TABLE `$table` ( `id` INT NOT NULL AUTO_INCREMENT, `Name` VARCHAR(100) NOT NULL , ";
+            foreach(array_merge($this->config['input_variables'], $this->config['output_variables']) as $column) {
+                $sql .= "`$column` DECIMAL(20,2) NOT NULL , ";
+            }
+            $sql .= "`EucDist` DECIMAL(20,2) NOT NULL, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
+
+            if ($this->db->query($sql) !== true) {
+                echo "Error: $sql <br>" . $this->db->error . "\n\n";
+                exit;
+            }
+        }
+
+        $this->config['db_table'] = $this->db_table = $table;
+
+        $this->initialise(true);
+    }
+
+    private function load_config() {
+        // get config from ini file
+        $this->config = parse_ini_file('config/get-chem.ini', true);
+
+        ini_set('memory_limit', $this->config['memory_limit']);
+
+        $this->config['db_table'] = $this->db_table;
+    }
+
+    private function initialise($first=false) {
+
+        // re-load config (allows re-configuration without restarting the software)
+        $this->load_config();
+
+        if($first) $this->help();
+
+        echo "\n\033[33mEnter command name or ID:\033[0m ";
+
+        // listen for input
+        $input = fgets(STDIN);
+        $action = trim($input);
+
+        if (array_key_exists($action, $this->allowed_actions)) {
+            $action = $this->allowed_actions[$action];
+        }
+
+        if (in_array($action, $this->allowed_actions)) {
+            if( !$this->$action() ) {
+                echo "\n\033[31mCommand aborted.\033[0m\n";
+            }
+        } else {
+            echo "\n\033[31mUnknown command.\033[0m\n";
+        }
+
+        $this->initialise();
+    }
+
+    private function reset_timer($message = '') {
+        if(!empty($message)) echo $message . ' ... ';
+        $this->timer = microtime(true);
+    }
+
+    private function get_timer($message = 'Done') {
+        $t = round(microtime(true) - $this->timer);
+        echo "\033[32m" . $message.' ['.sprintf('%02d:%02d:%02d', ($t/3600),($t/60%60), $t%60)."]\033[0m\n";
+    }
+
+    public function clean_up_directories() {
+
+        if( !$this->get_confirmation('This will delete all generated CSV files.') )
+            return false;
+
+        $this->reset_timer('Cleaning up directories');
+        foreach([$this->config['csv_inputs_path'], $this->config['csv_outputs_path']] as $folder) {
+            $files = glob("$folder/*"); // get all file names
+            foreach ($files as $file) { // iterate files
+                if (is_file($file)) {
+                    unlink($file);
+                } // delete file
+            }
+        }
+        $this->get_timer();
+
+        return true;
+    }
+
+    public function generate_input_values() {
+
+        $this->reset_timer('Generating input values');
+
+        $this->input_values = [];
+
+        foreach ($this->config['input_values_settings'] as $name => $properties) {
+            $iteration = $properties['start'];
+
+            while(true) {
+                $this->input_values[$name][] = $iteration;
+                $iteration += $properties['step'];
+
+                if(!$properties['overflow'] && $iteration > $properties['end']) break;
+
+                if( abs($properties['end'] - $iteration) <= ($properties['step'] / 2) ) {
+                    $this->input_values[$name][] = $iteration;
+                    break;
+                }
+
+                if( $iteration > $properties['end'] + $properties['step'] ) break;
+            }
+        }
+
+        $this->get_timer();
+
+        return true;
+    }
+
+    private function output_value_matrix($data) {
+        $max_lengths = [];
+        $max_rows = 0;
+        $line = '+';
+
+        foreach($data as $name => $values) {
+            array_unshift($values, $name);
+            $lengths = array_map('strlen', $values);
+            $max_lengths[$name] = max($lengths);
+            if($max_rows < count($values)-1) $max_rows = count($values)-1;
+
+            $line .= str_pad('',$max_lengths[$name],'-')."+";
+        }
+        $line .= "\n";
+        $headings = array_keys($data);
+        $header = '|';
+        foreach($headings as $value) {
+            $header .= str_pad($value, $max_lengths[$value]).'|';
+        }
+        $header .= "\n";
+        echo $line;
+        echo $header;
+        echo $line;
+
+        for($i=0; $i<$max_rows; $i++) {
+            echo "|";
+            foreach($headings as $name) {
+                $value = isset($data[$name][$i]) ? $data[$name][$i] : '';
+                echo str_pad($value, $max_lengths[$name])."|";
+            }
+            echo "\n";
+        }
+        echo $line;
+    }
+
+    public function output_input_values() {
+
+        if(empty($this->input_values)) {
+            echo "Input values array is empty. You need to run generate_input_values first!\n";
+            return false;
+        }
+
+        $this->output_value_matrix($this->input_values);
+
+        return true;
+    }
+
+    private function recursive_combinations($arrays, $i = 0) {
+        // source: http://stackoverflow.com/questions/8567082/how-to-generate-in-php-all-combinations-of-items-in-multiple-arrays
+
+        if (!isset($arrays[$i])) {
+            return array();
+        }
+        if ($i == count($arrays) - 1) {
+            return $arrays[$i];
+        }
+
+        // get combinations from subsequent arrays
+        $tmp = $this->recursive_combinations($arrays, $i + 1);
+
+        $result = array();
+
+        // concat each array from tmp with each element from $arrays[$i]
+        foreach ($arrays[$i] as $v) {
+            foreach ($tmp as $t) {
+                $result[] = is_array($t) ?
+                    array_merge(array($v), $t) :
+                    array($v, $t);
+            }
+        }
+
+        return $result;
+    }
+
+    public function generate_combinations() {
+        if(empty($this->input_values)) {
+            echo "Input values array is empty. You need to run generate_input_values first!\n";
+            return false;
+        }
+
+        $this->reset_timer('Generating combinations from all input values');
+
+        $combinationsInput = [];
+        foreach($this->input_values as $valueTypeArray) {
+            $combinationsInput[] = $valueTypeArray;
+        }
+
+        $this->combinations_array = $this->recursive_combinations($combinationsInput);
+        $this->combinations_count = count($this->combinations_array);
+
+        $this->get_timer('Generated '.$this->combinations_count.' combinations');
+
+        return true;
+    }
+
+    public function output_combinations() {
+        if(empty($this->combinations_array)) {
+            echo "Combinations array is empty. You need to run generate_combinations first!\n";
+            return false;
+        }
+
+        echo "This is madness! The number of combinations is ".$this->combinations_count."\n";
+
+        return true;
+    }
+
+    public function save_combinations() {
+        if(empty($this->combinations_array)) {
+            echo "Combinations array is empty. You need to run generate_combinations first!\n";
+            return false;
+        }
+
+        if(!is_writable($this->config['csv_inputs_path'])) {
+            echo "Directory ".$this->config['csv_inputs_path']." is not writable. Run this script as root. \n";
+            return false;
+        }
+
+        if( !$this->get_confirmation('Database table '.$this->config['db_table'].' will be truncated.') )
+            return false;
+
+        // clean-up db table
+        $sql = "TRUNCATE TABLE ".$this->config['db_table'].";";
+        if ($this->db->query($sql) !== true) {
+            echo "Error: $sql <br>" . $this->db->error . "\n\n";
+            exit;
+        }
+        $sql = "ALTER TABLE ".$this->config['db_table']." AUTO_INCREMENT = 1;";
+        if ($this->db->query($sql) !== true) {
+            echo "Error: $sql <br>" . $this->db->error . "\n\n";
+            exit;
+        }
+
+        // insert combinations into DB
+        $this->combinations_to_db();
+
+        // convert combinations to string (CSV format)
+        $this->combinations_to_csv();
+
+        // free up some memory
+        $this->combinations_array = [];
+
+        foreach($this->config['output_variables'] as $prediction) {
+            $this->reset_timer("Saving temp file $prediction.csv");
+            $fp = fopen($this->config['csv_inputs_path'].$prediction.'.csv', 'w');
+            fwrite($fp, implode(',', $this->config['input_variables']).",$prediction\n"); // write CSV headings
+            fwrite($fp, $this->combinations_string);
+            fclose($fp);
+            $this->get_timer();
+        }
+
+        // free up some more memory
+        $this->combinations_string = '';
+
+        return true;
+    }
+
+    private function combinations_to_db() {
+        $this->load_benchmark_data();
+
+        $this->reset_timer('Inserting combinations in database table '.$this->config['db_table']);
+
+        // insert combinations
+        foreach ($this->combinations_array as $combination) {
+            $sql = "INSERT INTO ".$this->config['db_table']." (".implode(',', $this->config['input_variables']).") VALUES (".implode(',', $combination).");";
+            if ($this->db->query($sql) !== true) {
+                echo "\nError: $sql <br>" . $this->db->error . "\n";
+            }
+        }
+        // insert benchmark data
+        foreach ($this->benchmark_data as $row) {
+            $sql = "INSERT INTO ".$this->config['db_table']." (Name,".implode(',', $this->config['input_variables']).") VALUES ('".$row['Name']."',";
+            foreach($this->config['input_variables'] as $variable) {
+                $sql .= $row[$variable].",";
+            }
+            $sql = rtrim($sql, ',').");";
+            if ($this->db->query($sql) !== true) {
+                echo "\nError: $sql <br>" . $this->db->error . "\n";
+            }
+        }
+
+        $this->get_timer();
+    }
+
+    private function combinations_to_csv() {
+
+        $this->reset_timer('Converting combinations to CSV format');
+        $this->combinations_string = implode("\n", array_map(function($arr) {
+            return implode(',', $arr).',0'; // the appended 0 is a placeholder for WEKA's predictions
+        }, $this->combinations_array));
+        $this->get_timer();
+
+        return true;
+    }
+
+    private function load_benchmark_data() {
+        if(!empty($this->benchmark_data))
+            return;
+
+        $this->reset_timer('Loading benchmark data');
+
+        $csv = array_map('str_getcsv', file($this->config['benchmark_data']));
+        array_walk($csv, function(&$a) use ($csv) {
+            $a = array_combine($csv[0], $a);
+        });
+        array_shift($csv); # remove column header
+
+        $this->benchmark_data = $csv;
+
+        $this->get_timer();
+    }
+
+    public function calculate_predictions() {
+
+        if( !$this->get_confirmation('This may take a while.') )
+            return false;
+
+        putenv('CLASSPATH='.$this->config['WEKA_install_path']); // make sure WEKA's jar is in ClassPath
+        foreach($this->config['output_variables'] as $prediction) {
+            $this->reset_timer("Calculating $prediction predictions");
+            $cmd = 'java weka.filters.supervised.attribute.AddClassification -serialized '.$this->config['WEKA_models_path'].$prediction.'.model -remove-old-class -classification -i '.$this->config['csv_inputs_path'].$prediction.'.csv -o '.$this->config['csv_outputs_path'].$prediction.'.csv -c 9';
+            shell_exec($cmd);
+            $this->get_timer();
+        }
+
+        return true;
+    }
+
+    public function calculate_eudist() {
+
+        if( !$this->get_confirmation('This may take a while.') )
+            return false;
+
+        $this->load_benchmark_data();
+        $this->load_predictions();
+
+        if(empty($this->predictions)) {
+            echo "Predictions array is empty. You need to run calculate_predictions first!\n";
+            return false;
+        }
+
+        $this->reset_timer('Calculating Euclidean Distances');
+
+        $count = count($this->predictions[reset($this->config['output_variables'])]);
+        $benchmark = end($this->benchmark_data);
+
+        for($i=0; $i<$count; $i++) {
+            $sum = 0;
+            foreach($this->config['output_variables'] as $prediction) {
+                $sum += pow( $this->normalise($prediction, $this->predictions[$prediction][$i]) - $this->normalise($prediction, $benchmark[$prediction]) ,2);
+            }
+            $this->predictions['EucDist'][$i] = sqrt($sum);
+        }
+
+        $this->get_timer();
+
+        $this->reset_timer('Saving results in database table '.$this->config['db_table']);
+
+        for($i=0; $i<$count; $i++) {
+
+            $sql = "UPDATE ".$this->config['db_table']." SET ";
+            foreach(array_keys($this->predictions) as $prediction) {
+                $sql .= " $prediction=".$this->predictions[$prediction][$i].",";
+            }
+            $sql = rtrim($sql, ',') . " WHERE id=".($i+1).";";
+
+            if ($this->db->query($sql) !== true) {
+                echo "\nError: $sql <br>" . $this->db->error . "\n";
+            }
+        }
+
+        // free up some memory space
+        $this->predictions = [];
+
+        $this->get_timer();
+
+        return true;
+    }
+
+    private function normalise($prediction, $value) {
+        if(is_nan($this->norm['min'][$prediction]) || $this->norm['min'][$prediction] == $this->norm['max'][$prediction]) {
+            return 0;
+        } else {
+            return ($value - $this->norm['min'][$prediction]) / ($this->norm['max'][$prediction] - $this->norm['min'][$prediction]);
+        }
+    }
+
+    private function load_predictions() {
+        if(!empty($this->predictions))
+            return;
+
+        foreach($this->config['output_variables'] as $prediction) {
+
+            $this->reset_timer("Loading predictions from $prediction.csv");
+
+            $file = file($this->config['csv_outputs_path'].$prediction.'.csv', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            // remove first 11 lines (irrelevant data from WEKA)
+            for($i=0; $i<11; $i++) {
+                unset($file[$i]);
+            }
+            $file = array_values($file);
+
+            $this->predictions[$prediction] = array_map(function($line) {
+                $line = explode(',', $line);
+                return floatval(end($line));
+            }, $file);
+
+            // add benchmark data
+            foreach($this->benchmark_data as $row) {
+                $this->predictions[$prediction][] = $row[$prediction];
+            }
+
+            // get min/max for data normalisation
+            $this->norm['min'][$prediction] = min($this->predictions[$prediction]);
+            $this->norm['max'][$prediction] = max($this->predictions[$prediction]);
+
+            $this->get_timer();
+        }
+    }
+
+    public function export_best_performers() {
+        $this->db_export('best');
+
+        return true;
+    }
+
+    public function export_worst_performers() {
+        $this->db_export('worst');
+
+        return true;
+    }
+
+    public function export_best_with_benchmark() {
+        $this->db_export('best', true);
+
+        return true;
+    }
+
+    public function export_worst_with_benchmark() {
+        $this->db_export('worst', true);
+
+        return true;
+    }
+
+    private function db_export($type, $benchmark = false) {
+        $order = [
+            'best' => 'ASC',
+            'worst'=> 'DESC',
+        ];
+
+        echo "\n\033[33mNumber of $type performers to be exported: \033[0m";
+        while($input = fgets(STDIN)){
+            if (intval($input)) {
+                if($benchmark) {
+                    $sql = "(SELECT * FROM " . $this->config['db_table'] . " WHERE Name = '' LIMIT " . intval($input) . ")";
+                    $sql .= " UNION ALL ";
+                    $sql .= "(SELECT * FROM " . $this->config['db_table'] . " WHERE Name <> '')";
+                    $sql .= " ORDER BY EucDist " . $order[$type] . ";";
+                } else {
+                    $sql = "SELECT * FROM ".$this->config['db_table']." ORDER BY EucDist ".$order[$type]." LIMIT ".intval($input).";";
+                }
+                break;
+            } else {
+                echo "\nValue not an integer. Please try again: ";
+            }
+        }
+
+        $this->reset_timer('Fetching '.intval($input)." $type performers from DB");
+
+        $data = '';
+
+        $result = $this->db->query($sql);
+
+        $this->get_timer();
+
+        $this->reset_timer('Exporting data to '.$this->config['exports_path'].$type.intval($input).'.csv');
+
+        $finfo = $result->fetch_fields();
+        foreach ($finfo as $field) {
+            $data .= $field->name.',';
+        }
+        $data = rtrim($data, ',');
+
+        while ($row = $result->fetch_row()) {
+            $data .= "\n";
+            foreach($row as $col) {
+                $data .= $col.',';
+            }
+            $data = rtrim($data,',')."\n";
+        }
+
+        $fp = fopen($this->config['exports_path'].$type.intval($input).".csv", "w");
+        fwrite($fp, $data);
+        fclose($fp);
+
+        $this->get_timer();
+    }
+
+    private function get_confirmation($message) {
+        echo $message . " \033[33mType y/n to continue:\033[0m ";
+        while($input = fgets(STDIN)){
+            if (in_array(trim($input), ['y','yes'])) return true;
+            elseif (in_array(trim($input), ['n','no'])) return false;
+        }
+        echo "\n";
+    }
+
+    public function help() {
+        // output available commands
+        echo "\n\033[1mGetChem Software\033[0m\n----------------";
+        echo "\nAvailable commands:\n\n";
+        foreach ($this->allowed_actions as $id => $action) {
+            echo "[$id] $action\n";
+        }
+        echo "\n";
+
+        return true;
+    }
+
+    public function close() {
+        echo "\n\033[1mGoodbye!\033[0m\n\n";
+        exit;
+    }
+}
+
+$GetChem = new GetChem(get_class_methods('GetChem'));
