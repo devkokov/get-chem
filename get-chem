@@ -513,7 +513,7 @@ class GetChem {
         while($input = fgets(STDIN)){
             if (intval($input)) {
                 if($benchmark) {
-                    $sql = "(SELECT * FROM " . $this->config['db_table'] . " WHERE Name = '' LIMIT " . intval($input) . ")";
+                    $sql = "(SELECT * FROM " . $this->config['db_table'] . " WHERE Name = '' ORDER BY EucDist ".$order[$type]." LIMIT " . intval($input) . ")";
                     $sql .= " UNION ALL ";
                     $sql .= "(SELECT * FROM " . $this->config['db_table'] . " WHERE Name <> '')";
                     $sql .= " ORDER BY EucDist " . $order[$type] . ";";
