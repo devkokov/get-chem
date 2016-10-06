@@ -2,13 +2,13 @@
 
 ## Introduction
 
-This is a piece of software that I wrote in a weekend for a friend of mine who's doing his PhD in Biology/Chemistry. I asked him to write the scientific description below, as he can explain it far better than I can, but the basic idea is that we use brute-force to generate A LOT of cell chemistry designs. Then we run a set of WEKA models (not included here) to calculate various predictions for each chemistry design. Then we load all predictions in memory and compare them to a set of known chemistry designs by calculating the Euclidean distances between them. Everything gets stored in a MySQL database to allow for reporting.
+This piece of software is meant for numerical optimization for low or high-dimensionality problems. It generates test cases as inputs, calls WEKA predictive models (Java) to estimate outputs and then compares the mathematical closesness/distance of these outputs comapred to benchmark(s). The user can specify the input variables (min/incremeant/max values), WEKA models need to be premade, and outputs are user-specified. Once outputs are estimated and benchmark(s) given, all is held in memory to standardise and perform Euclidean distance estimating between the two. The software then seeks a MySQL database to store results and report.
+
 
 The Feature Scaling method (formula below) is used for normalising the data prior to calculating Euclidean distances.
 
 ![Feature scaling](https://wikimedia.org/api/rest_v1/media/math/render/svg/358923abc154221bb5022fc329061f6fc4dcc69f)
 
-#### Scientist's description
 
 
 ## Requirements
@@ -17,7 +17,7 @@ The Feature Scaling method (formula below) is used for normalising the data prio
 - PHP >= 5.6
 - MySQL server
 - Java (OpenJDK is fine)
-- WEKA 3.9.0
+- WEKA 3.8.0
 - Trained serialised WEKA models
 
 ## Configuration
@@ -27,7 +27,7 @@ The Feature Scaling method (formula below) is used for normalising the data prio
 All configuration of get-chem is done in `config/get-chem.ini`
 
 1. Set correct file paths to temp folders and executables (e.g. WEKA install path etc.)
-2. Set memory limit to as high as possible. Processing ~3.5 million chemistry designs with 8 inputs and 8 outputs needs roughly 6GB of RAM.
+2. Set memory limit to as high as possible. Processing ~4 million test cases with 8 inputs and 8 outputs needs ~6GB of RAM on CentOS.
 3. Set your database connection settings
 4. Add any number of input and output variables. There must be at least 1 input and 1 output variable.
 
@@ -44,21 +44,21 @@ There are 4 parameters that need to be defined for each input variable:
 
 **Example 1**
 ```
-LogP1[start] = 1
-LogP1[end] = 3.3
-LogP1[step] = 0.5
-LogP1[overflow] = true
+Var1[start] = 1
+Var1[end] = 3.3
+Var1[step] = 0.5
+Var1[overflow] = true
 ```
-Generates LogP1 values 1, 1.5, 2, 2.5, 3, 3.5
+Generates Var1 values 1, 1.5, 2, 2.5, 3, 3.5
 
 **Example 2**
 ```
-LogP1[start] = 1
-LogP1[end] = 3.3
-LogP1[step] = 0.5
-LogP1[overflow] = false
+Var2[start] = 1
+Var2[end] = 3.3
+Var2[step] = 0.5
+Var2[overflow] = false
 ```
-Generates LogP1 values 1, 1.5, 2, 2.5, 3
+Generates Var1 values 1, 1.5, 2, 2.5, 3
 
 ### Benchmark dataset
 

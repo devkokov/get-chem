@@ -1,8 +1,14 @@
 <?php
 
 /**
- * @name GetChem
+ * @package GetChem
+ *
+ * @source https://github.com/devkokov/get-chem
+ *
+ * @license https://opensource.org/licenses/mit-license.html MIT License
+ *
  * @author  Dimitar Kokov - dm.kokov@gmail.com
+ * @author  George Joseph - gjnet@live.com
  */
 
 
