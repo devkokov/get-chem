@@ -71,7 +71,7 @@ By default, the benchmark dataset is in `config/benchmark.csv`. The format of th
 
 By default, the trained (and serialised!) WEKA models should be placed in `library/WEKA/`. Note that the filenames of the models should match the `output_variables` defined in `get-chem.ini`. These are case-sensitive. There should be a WEKA model for each output variable.
 
-Your WEKA models should be trained to accept a CSV input file that contains all `input_variables` as defined in `config/get-chem.ini`. The order of columns and letter-case DO matter! The last column in the input CSV will different per model, as this is where WEKA will output its prediction. The label of this last column should match one of the defined `output_variables`.
+Your WEKA models should be trained to accept a CSV input file that contains all `input_variables` as defined in `config/get-chem.ini`. The order of columns and letter-case DO matter! The last column in the input CSV will be different per model, as this is where WEKA will output its prediction. The label of this last column should match one of the defined `output_variables`.
 
 ## Usage
 
