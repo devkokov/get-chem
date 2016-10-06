@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This piece of software is meant for numerical optimization for low or high-dimensionality problems. It generates test cases as inputs, calls WEKA predictive models (Java) to estimate outputs and then compares the mathematical closesness/distance of these outputs comapred to benchmark(s). The user can specify the input variables (min/incremeant/max values), WEKA models need to be premade, and outputs are user-specified. Once outputs are estimated and benchmark(s) given, all is held in memory to standardise and perform Euclidean distance estimating between the two. The software then seeks a MySQL database to store results and report.
+This piece of software is meant for numerical optimization for low or high-dimensionality problems. It generates test cases as inputs, calls WEKA predictive models (Java) to estimate outputs and then compares the mathematical closeness/distance of these outputs compared to benchmark(s). The user can specify the input variables (min/increment/max values), WEKA models need to be pre-made, and outputs are user-specified. Once outputs are estimated and benchmark(s) given, all is held in memory to standardise and perform Euclidean distance estimating between the two. The software then seeks a MySQL database to store results and report.
 
 
 The Feature Scaling method (formula below) is used for normalising the data prior to calculating Euclidean distances.
@@ -60,21 +60,21 @@ Var2[overflow] = false
 ```
 Generates Var1 values 1, 1.5, 2, 2.5, 3
 
-### Benchmark dataset
+### Benchmark data set
 
-By default, the benchmark dataset is in `config/benchmark.csv`. The format of the CSV should be as follows:
+By default, the benchmark data set is in `config/benchmark.csv`. The format of the CSV should be as follows:
 - 'Name' column
 - A column for each of the `input_variables` as defined in `config/get-chem.ini`
 - A column for each of the `output_variables` as defined in `config/get-chem.ini`
 
 ### WEKA Models
 
-By default, the trained (and serialised!) WEKA models should be placed in `library/WEKA/`. Note that the filenames of the models should match the `output_variables` defined in `get-chem.ini`. These are case-sensitive. There should be a WEKA model for each output variable.
+By default, the trained (and serialised!) WEKA models should be placed in `library/WEKA/`. Note that the file names of the models should match the `output_variables` defined in `get-chem.ini`. These are case-sensitive. There should be a WEKA model for each output variable.
 
 Your WEKA models should be trained to accept a CSV input file that contains all `input_variables` as defined in `config/get-chem.ini`. The order of columns and letter-case DO matter! The last column in the input CSV will be different per model, as this is where WEKA will output its prediction. The label of this last column should match one of the defined `output_variables`.
 
 ## Usage
 
-1. Open a command line terminal and navigate to the directory where get-chem is isntalled
+1. Open a command line terminal and navigate to the directory where get-chem is installed
 2. Run command `sudo php get-chem`
 3. Follow the on-screen instructions
