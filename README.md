@@ -53,10 +53,10 @@ Generates Var1 values 1, 1.5, 2, 2.5, 3, 3.5
 
 **Example 2**
 ```
-Var2[start] = 1
-Var2[end] = 3.3
-Var2[step] = 0.5
-Var2[overflow] = false
+Var1[start] = 1
+Var1[end] = 3.3
+Var1[step] = 0.5
+Var1[overflow] = false
 ```
 Generates Var1 values 1, 1.5, 2, 2.5, 3
 
