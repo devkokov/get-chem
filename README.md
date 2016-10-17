@@ -5,9 +5,15 @@
 This piece of software is meant for numerical optimization for low or high-dimensionality problems. It generates test cases as inputs, calls WEKA predictive models (Java) to estimate outputs and then compares the mathematical closeness/distance of these outputs compared to benchmark(s). The user can specify the input variables (min/increment/max values), WEKA models need to be pre-made, and outputs are user-specified. Once outputs are estimated and benchmark(s) given, all is held in memory to standardise and perform Euclidean distance estimating between the two. The software then seeks a MySQL database to store results and report.
 
 
-The Feature Scaling method (formula below) is used for normalising the data prior to calculating Euclidean distances.
+The data is normalised using one of the below methods prior to calculating Euclidean distances:
 
-![Feature scaling](https://wikimedia.org/api/rest_v1/media/math/render/svg/358923abc154221bb5022fc329061f6fc4dcc69f)
+"Rescaling" normalisation method (formula below)
+
+![Rescaling](https://wikimedia.org/api/rest_v1/media/math/render/svg/358923abc154221bb5022fc329061f6fc4dcc69f)
+
+"Standardization" normalisation method (formula below)
+
+![Standardization](https://wikimedia.org/api/rest_v1/media/math/render/svg/b0aa2e7d203db1526c577192f2d9102b718eafd5)
 
 
 

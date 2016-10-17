@@ -93,6 +93,9 @@ class GetChem {
         $input = fgets(STDIN);
         $action = trim($input);
 
+        // clever UI ;)
+        if($action == 'exit') $action = 'close';
+
         if (array_key_exists($action, $this->allowed_actions)) {
             $action = $this->allowed_actions[$action];
         }
@@ -110,12 +113,14 @@ class GetChem {
 
     private function reset_timer($message = '') {
         if(!empty($message)) echo $message . ' ... ';
+        shell_exec('espeak "'.str_replace('"', "'", $message).'" 2> /dev/null');
         $this->timer = microtime(true);
     }
 
     private function get_timer($message = 'Done') {
         $t = round(microtime(true) - $this->timer);
         echo "\033[32m" . $message.' ['.sprintf('%02d:%02d:%02d', ($t/3600),($t/60%60), $t%60)."]\033[0m\n";
+        shell_exec('espeak "Complete" 2> /dev/null');
     }
 
     public function clean_up_directories() {
@@ -172,7 +177,7 @@ class GetChem {
         $line = '+';
 
         foreach($data as $name => $values) {
-            array_unshift($values, $name);
+            array_unshift($values, $name.' ('.count($values).')');
             $lengths = array_map('strlen', $values);
             $max_lengths[$name] = max($lengths);
             if($max_rows < count($values)-1) $max_rows = count($values)-1;
@@ -183,7 +188,7 @@ class GetChem {
         $headings = array_keys($data);
         $header = '|';
         foreach($headings as $value) {
-            $header .= str_pad($value, $max_lengths[$value]).'|';
+            $header .= str_pad($value.' ('.count($data[$value]).')', $max_lengths[$value]).'|';
         }
         $header .= "\n";
         echo $line;
@@ -445,11 +450,35 @@ class GetChem {
     }
 
     private function normalise($prediction, $value) {
-        if(is_nan($this->norm['min'][$prediction]) || $this->norm['min'][$prediction] == $this->norm['max'][$prediction]) {
-            return 0;
-        } else {
-            return ($value - $this->norm['min'][$prediction]) / ($this->norm['max'][$prediction] - $this->norm['min'][$prediction]);
+        switch ($this->config['normalisation']) {
+            case 'rescaling':
+                if(is_nan($this->norm['min'][$prediction]) || $this->norm['min'][$prediction] == $this->norm['max'][$prediction]) {
+                    return 0;
+                } else {
+                    return ($value - $this->norm['min'][$prediction]) / ($this->norm['max'][$prediction] - $this->norm['min'][$prediction]);
+                }
+                break;
+
+            case 'standardization':
+                return ($value - $this->norm['mean'][$prediction]) / $this->norm['sd'][$prediction];
+                break;
         }
+    }
+
+    private function mean($arr) {
+        $total = 0;
+        foreach ($arr as $value) {
+            $total += $value;
+        }
+        return $total/count($arr);
+    }
+
+    private function standard_deviation($arr, $mean) {
+        $total = 0;
+        foreach ($arr as $value) {
+            $total += pow($value - $mean, 2);
+        }
+        return sqrt($total / count($arr));
     }
 
     private function load_predictions() {
@@ -481,41 +510,45 @@ class GetChem {
             $this->norm['min'][$prediction] = min($this->predictions[$prediction]);
             $this->norm['max'][$prediction] = max($this->predictions[$prediction]);
 
+            // get mean average and standard deviation for data normalisation
+            $this->norm['mean'][$prediction] = $this->mean($this->predictions[$prediction]);
+            $this->norm['sd'][$prediction] = $this->standard_deviation($this->predictions[$prediction], $this->norm['mean'][$prediction]);
+
             $this->get_timer();
         }
     }
 
-    public function export_best_performers() {
-        $this->db_export('best');
+    public function export_closest_results() {
+        $this->db_export('closest');
 
         return true;
     }
 
-    public function export_worst_performers() {
-        $this->db_export('worst');
+    public function export_furthest_results() {
+        $this->db_export('furthest');
 
         return true;
     }
 
-    public function export_best_with_benchmark() {
-        $this->db_export('best', true);
+    public function export_closest_with_benchmark() {
+        $this->db_export('closest', true);
 
         return true;
     }
 
-    public function export_worst_with_benchmark() {
-        $this->db_export('worst', true);
+    public function export_furthest_with_benchmark() {
+        $this->db_export('furthest', true);
 
         return true;
     }
 
     private function db_export($type, $benchmark = false) {
         $order = [
-            'best' => 'ASC',
-            'worst'=> 'DESC',
+            'closest' => 'ASC',
+            'furthest'=> 'DESC',
         ];
 
-        echo "\n\033[33mNumber of $type performers to be exported: \033[0m";
+        echo "\n\033[33mNumber of $type results to be exported: \033[0m";
         while($input = fgets(STDIN)){
             if (intval($input)) {
                 if($benchmark) {
@@ -532,7 +565,7 @@ class GetChem {
             }
         }
 
-        $this->reset_timer('Fetching '.intval($input)." $type performers from DB");
+        $this->reset_timer('Fetching '.intval($input)." $type results from DB");
 
         $data = '';
 
