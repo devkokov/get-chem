@@ -26,8 +26,18 @@ class GetChem {
     var $predictions;
     var $allowed_actions;
     var $norm;
+    var $isWindows; // ugh, Windows
+    var $toDevNull;
 
     function __construct($allowed_actions) {
+
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $this->isWindows = true;
+        } else {
+            $this->isWindows = false;
+        }
+
+        $this->toDevNull = $this->isWindows ? " > NUL" : " 2> /dev/null";
 
         $this->load_config();
 
@@ -96,6 +106,13 @@ class GetChem {
         // clever UI ;)
         if($action == 'exit') $action = 'close';
 
+        $this->callAction($action);
+
+        $this->initialise();
+    }
+
+    // $action can be either ID or name of action
+    private function callAction($action) {
         if (array_key_exists($action, $this->allowed_actions)) {
             $action = $this->allowed_actions[$action];
         }
@@ -107,20 +124,18 @@ class GetChem {
         } else {
             echo "\n\033[31mUnknown command.\033[0m\n";
         }
-
-        $this->initialise();
     }
 
     private function reset_timer($message = '') {
         if(!empty($message)) echo $message . ' ... ';
-        shell_exec('espeak "'.str_replace('"', "'", $message).'" 2> /dev/null');
+        if ($this->config['espeak_enabled']) shell_exec('espeak "'.str_replace('"', "'", $message).'"'.$this->toDevNull);
         $this->timer = microtime(true);
     }
 
     private function get_timer($message = 'Done') {
         $t = round(microtime(true) - $this->timer);
         echo "\033[32m" . $message.' ['.sprintf('%02d:%02d:%02d', ($t/3600),($t/60%60), $t%60)."]\033[0m\n";
-        shell_exec('espeak "Complete" 2> /dev/null');
+        if ($this->config['espeak_enabled']) shell_exec('espeak "'.str_replace('"', "'", $message).'"'.$this->toDevNull);
     }
 
     public function clean_up_directories() {
@@ -260,6 +275,11 @@ class GetChem {
 
         $this->combinations_array = $this->recursive_combinations($combinationsInput);
         $this->combinations_count = count($this->combinations_array);
+
+        // create a copy of the config file
+        $configCopy = 'config/get-chem-'.$this->db_table.'.ini';
+        if(file_exists($configCopy)) unlink($configCopy);
+        copy('config/get-chem.ini', $configCopy);
 
         $this->get_timer('Generated '.$this->combinations_count.' combinations');
 
@@ -551,13 +571,14 @@ class GetChem {
         echo "\n\033[33mNumber of $type results to be exported: \033[0m";
         while($input = fgets(STDIN)){
             if (intval($input)) {
+                $selectFields = "CONCAT('".$this->config['db_table'].".', id) as ID, Name, ".implode(', ', array_merge($this->config['input_variables'], $this->config['output_variables']));
                 if($benchmark) {
-                    $sql = "(SELECT * FROM " . $this->config['db_table'] . " WHERE Name = '' ORDER BY EucDist ".$order[$type]." LIMIT " . intval($input) . ")";
+                    $sql = "(SELECT $selectFields FROM " . $this->config['db_table'] . " WHERE Name = '' ORDER BY EucDist ".$order[$type]." LIMIT " . intval($input) . ")";
                     $sql .= " UNION ALL ";
-                    $sql .= "(SELECT * FROM " . $this->config['db_table'] . " WHERE Name <> '')";
+                    $sql .= "(SELECT $selectFields FROM " . $this->config['db_table'] . " WHERE Name <> '')";
                     $sql .= " ORDER BY EucDist " . $order[$type] . ";";
                 } else {
-                    $sql = "SELECT * FROM ".$this->config['db_table']." ORDER BY EucDist ".$order[$type]." LIMIT ".intval($input).";";
+                    $sql = "SELECT $selectFields FROM ".$this->config['db_table']." ORDER BY EucDist ".$order[$type]." LIMIT ".intval($input).";";
                 }
                 break;
             } else {
@@ -573,7 +594,7 @@ class GetChem {
 
         $this->get_timer();
 
-        $this->reset_timer('Exporting data to '.$this->config['exports_path'].$type.intval($input).'.csv');
+        $this->reset_timer('Exporting data to '.$this->config['exports_path'].$this->db_table.'-'.$type.intval($input).'.csv');
 
         $finfo = $result->fetch_fields();
         foreach ($finfo as $field) {
@@ -589,11 +610,26 @@ class GetChem {
             $data = rtrim($data,',')."\n";
         }
 
-        $fp = fopen($this->config['exports_path'].$type.intval($input).".csv", "w");
+        $fp = fopen($this->config['exports_path'].$this->db_table.'-'.$type.intval($input).".csv", "w");
         fwrite($fp, $data);
         fclose($fp);
 
         $this->get_timer();
+    }
+
+    public function automate_commands() {
+        echo "\n\033[33mComma-separated list of command names/IDs to run in sequence:\033[0m ";
+
+        // listen for input
+        $input = fgets(STDIN);
+
+        $commandIds = explode(',', $input);
+
+        foreach ($commandIds as $commandId) {
+            $this->callAction( trim($commandId) );
+        }
+
+        return true;
     }
 
     private function get_confirmation($message) {
