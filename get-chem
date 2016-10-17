@@ -66,9 +66,9 @@ class GetChem {
             // create a db table with column for each input and output variable
             $sql = "CREATE TABLE `$table` ( `id` INT NOT NULL AUTO_INCREMENT, `Name` VARCHAR(100) NOT NULL DEFAULT '' , ";
             foreach(array_merge($this->config['input_variables'], $this->config['output_variables']) as $column) {
-                $sql .= "`$column` DECIMAL(20,2) NOT NULL DEFAULT 0 , ";
+                $sql .= "`$column` DECIMAL(20,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0 , ";
             }
-            $sql .= "`EucDist` DECIMAL(20,2) NOT NULL DEFAULT 0, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
+            $sql .= "`EucDist` DECIMAL(20,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
 
             if ($this->db->query($sql) !== true) {
                 echo "Error: $sql <br>" . $this->db->error . "\n\n";
@@ -167,13 +167,13 @@ class GetChem {
             $iteration = $properties['start'];
 
             while(true) {
-                $this->input_values[$name][] = $iteration;
+                $this->input_values[$name][] = round($iteration, $this->config['decimal_precision']);
                 $iteration += $properties['step'];
 
                 if(!$properties['overflow'] && $iteration > $properties['end']) break;
 
                 if( abs($properties['end'] - $iteration) <= ($properties['step'] / 2) ) {
-                    $this->input_values[$name][] = $iteration;
+                    $this->input_values[$name][] = round($iteration, $this->config['decimal_precision']);
                     break;
                 }
 
