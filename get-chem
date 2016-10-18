@@ -486,7 +486,7 @@ class GetChem {
                 break;
 
             case 'standardization':
-                return ($value - $this->norm['mean'][$prediction]) / $this->norm['sd'][$prediction];
+                return $value / $this->norm['sd'][$prediction];
                 break;
         }
     }
