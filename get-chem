@@ -28,6 +28,7 @@ class GetChem {
     var $norm;
     var $isWindows; // ugh, Windows
     var $toDevNull;
+    var $bypassConfirmation;
 
     function __construct($allowed_actions) {
 
@@ -38,6 +39,8 @@ class GetChem {
         }
 
         $this->toDevNull = $this->isWindows ? " > NUL" : " 2> /dev/null";
+
+        $this->bypassConfirmation = false; // set a default value
 
         $this->load_config();
 
@@ -190,8 +193,10 @@ class GetChem {
         $max_lengths = [];
         $max_rows = 0;
         $line = '+';
+        $totalNumber = 0;
 
         foreach($data as $name => $values) {
+            $totalNumber += count($values);
             array_unshift($values, $name.' ('.count($values).')');
             $lengths = array_map('strlen', $values);
             $max_lengths[$name] = max($lengths);
@@ -219,6 +224,7 @@ class GetChem {
             echo "\n";
         }
         echo $line;
+        echo "Total number of input values: $totalNumber \n";
     }
 
     public function output_input_values() {
@@ -571,12 +577,12 @@ class GetChem {
         echo "\n\033[33mNumber of $type results to be exported: \033[0m";
         while($input = fgets(STDIN)){
             if (intval($input)) {
-                $selectFields = "CONCAT('".$this->config['db_table'].".', id) as ID, Name, ".implode(', ', array_merge($this->config['input_variables'], $this->config['output_variables'])).", EucDist";
+                $selectFields = "Name, CONCAT('".$this->config['db_table'].".', id) as ID, ".implode(', ', array_merge($this->config['input_variables'], $this->config['output_variables'])).", EucDist";
                 if($benchmark) {
                     $sql = "(SELECT $selectFields FROM " . $this->config['db_table'] . " WHERE Name = '' ORDER BY EucDist ".$order[$type]." LIMIT " . intval($input) . ")";
                     $sql .= " UNION ALL ";
                     $sql .= "(SELECT $selectFields FROM " . $this->config['db_table'] . " WHERE Name <> '')";
-                    $sql .= " ORDER BY EucDist " . $order[$type] . ";";
+                    $sql .= " ORDER BY IF(Name <> '', 0, 1) ASC, EucDist " . $order[$type] . ";";
                 } else {
                     $sql = "SELECT $selectFields FROM ".$this->config['db_table']." ORDER BY EucDist ".$order[$type]." LIMIT ".intval($input).";";
                 }
@@ -620,6 +626,8 @@ class GetChem {
     public function automate_commands() {
         echo "\n\033[33mComma-separated list of command names/IDs to run in sequence:\033[0m ";
 
+        $this->bypassConfirmation = true;
+
         // listen for input
         $input = fgets(STDIN);
 
@@ -629,10 +637,15 @@ class GetChem {
             $this->callAction( trim($commandId) );
         }
 
+        $this->bypassConfirmation = false;
+
         return true;
     }
 
     private function get_confirmation($message) {
+
+        if($this->bypassConfirmation) return true;
+
         echo $message . " \033[33mType y/n to continue:\033[0m ";
         while($input = fgets(STDIN)){
             if (in_array(trim($input), ['y','yes'])) return true;
