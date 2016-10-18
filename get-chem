@@ -571,7 +571,7 @@ class GetChem {
         echo "\n\033[33mNumber of $type results to be exported: \033[0m";
         while($input = fgets(STDIN)){
             if (intval($input)) {
-                $selectFields = "CONCAT('".$this->config['db_table'].".', id) as ID, Name, ".implode(', ', array_merge($this->config['input_variables'], $this->config['output_variables']));
+                $selectFields = "CONCAT('".$this->config['db_table'].".', id) as ID, Name, ".implode(', ', array_merge($this->config['input_variables'], $this->config['output_variables'])).", EucDist";
                 if($benchmark) {
                     $sql = "(SELECT $selectFields FROM " . $this->config['db_table'] . " WHERE Name = '' ORDER BY EucDist ".$order[$type]." LIMIT " . intval($input) . ")";
                     $sql .= " UNION ALL ";
