@@ -29,6 +29,7 @@ class GetChem {
     var $isWindows; // ugh, Windows
     var $toDevNull;
     var $bypassConfirmation;
+    var $totalProcessingTime;
 
     function __construct($allowed_actions) {
 
@@ -41,6 +42,7 @@ class GetChem {
         $this->toDevNull = $this->isWindows ? " > NUL" : " 2> /dev/null";
 
         $this->bypassConfirmation = false; // set a default value
+        $this->totalProcessingTime = 0;
 
         $this->load_config();
 
@@ -137,8 +139,14 @@ class GetChem {
 
     private function get_timer($message = 'Done') {
         $t = round(microtime(true) - $this->timer);
+        $this->totalProcessingTime += $t;
         echo "\033[32m" . $message.' ['.sprintf('%02d:%02d:%02d', ($t/3600),($t/60%60), $t%60)."]\033[0m\n";
         if ($this->config['espeak_enabled']) shell_exec('espeak "'.str_replace('"', "'", $message).'"'.$this->toDevNull);
+    }
+
+    private function get_total_time() {
+        $t = $this->totalProcessingTime;
+        return "[".sprintf('%02d.%02d.%02d', ($t/3600), ($t/60%60), $t%60)."]";
     }
 
     public function clean_up_directories() {
@@ -592,6 +600,8 @@ class GetChem {
             }
         }
 
+        $fileName = $this->config['exports_path'].$this->db_table.'-'.$type.intval($input).' '.$this->get_total_time().'.csv';
+
         $this->reset_timer('Fetching '.intval($input)." $type results from DB");
 
         $data = '';
@@ -600,7 +610,7 @@ class GetChem {
 
         $this->get_timer();
 
-        $this->reset_timer('Exporting data to '.$this->config['exports_path'].$this->db_table.'-'.$type.intval($input).'.csv');
+        $this->reset_timer('Exporting data to '.$fileName);
 
         $finfo = $result->fetch_fields();
         foreach ($finfo as $field) {
@@ -616,7 +626,7 @@ class GetChem {
             $data = rtrim($data,',')."\n";
         }
 
-        $fp = fopen($this->config['exports_path'].$this->db_table.'-'.$type.intval($input).".csv", "w");
+        $fp = fopen($fileName, "w");
         fwrite($fp, $data);
         fclose($fp);
 
