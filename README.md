@@ -2,10 +2,10 @@
 
 ## Introduction
 
-This piece of software is meant for numerical optimization for low or high-dimensionality problems. It generates test cases as inputs, calls WEKA predictive models (Java) to estimate outputs and then compares the mathematical closeness/distance of these outputs compared to benchmark(s). The user can specify the input variables (min/increment/max values), WEKA models need to be pre-made, and outputs are user-specified. Once outputs are estimated and benchmark(s) given, all is held in memory to standardise and perform Euclidean distance estimating between the two. The software then seeks a MySQL database to store results and report.
+This piece of software is meant for numerical optimization for low or high-dimensionality problems. It generates test cases as inputs, calls WEKA predictive models (Java) to estimate outputs and then compares the mathematical closeness/distance of these outputs compared to benchmark(s). The user can specify the input variables (min/increment/max values), WEKA models need to be pre-made, and outputs are user-specified. Once outputs are estimated and benchmark(s) given, all is held in memory to normalise (optional) and perform comparison calculations. The software then seeks a MySQL database to store results and report.
 
 
-The data is normalised using one of the below methods prior to calculating Euclidean distances:
+The data can be normalised (optional) using one of the below methods prior to comparing results:
 
 "Rescaling" normalisation method (formula below)
 
@@ -15,6 +15,11 @@ The data is normalised using one of the below methods prior to calculating Eucli
 
 ![Standardization](https://wikimedia.org/api/rest_v1/media/math/render/svg/b0aa2e7d203db1526c577192f2d9102b718eafd5)
 
+
+Results are compared using one of the below methods:
+
+- Euclidean Distance
+- Dissimilarity Index
 
 
 ## Requirements
@@ -35,7 +40,10 @@ All configuration of get-chem is done in `config/get-chem.ini`
 1. Set correct file paths to temp folders and executables (e.g. WEKA install path etc.)
 2. Set memory limit to as high as possible. Processing ~4 million test cases with 8 inputs and 8 outputs needs ~6GB of RAM on CentOS.
 3. Set your database connection settings
-4. Add any number of input and output variables. There must be at least 1 input and 1 output variable.
+4. Set a comparison method
+5. Set a normalisation method (optional). Set to "none" to switch normalisation off
+6. Set desired decimal precision for calculations
+7. Add any number of input and output variables. There must be at least 1 input and 1 output variable.
 
 ### Input Values
 
@@ -72,6 +80,8 @@ By default, the benchmark data set is in `config/benchmark.csv`. The format of t
 - 'Name' column
 - A column for each of the `input_variables` as defined in `config/get-chem.ini`
 - A column for each of the `output_variables` as defined in `config/get-chem.ini`
+
+IMPORTANT: test cases are compared against the last row of the benchmark data set.
 
 ### WEKA Models
 

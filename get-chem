@@ -30,6 +30,7 @@ class GetChem {
     var $toDevNull;
     var $bypassConfirmation;
     var $totalProcessingTime;
+    var $comparison;
 
     function __construct($allowed_actions) {
 
@@ -62,28 +63,30 @@ class GetChem {
         $input = fgets(STDIN);
         $table = trim($input);
 
+        $this->config['db_table'] = $this->db_table = $table;
+
         $table_exists = false;
         if ($result = $this->db->query("SHOW TABLES LIKE '".$table."'")) {
             $table_exists = ($result->num_rows == 1);
         }
-        if(!$table_exists) {
 
-            // create a db table with column for each input and output variable
-            $sql = "CREATE TABLE `$table` ( `id` INT NOT NULL AUTO_INCREMENT, `Name` VARCHAR(100) NOT NULL DEFAULT '' , ";
-            foreach(array_merge($this->config['input_variables'], $this->config['output_variables']) as $column) {
-                $sql .= "`$column` DECIMAL(20,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0 , ";
-            }
-            $sql .= "`EucDist` DECIMAL(20,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
-
-            if ($this->db->query($sql) !== true) {
-                echo "Error: $sql <br>" . $this->db->error . "\n\n";
-                exit;
-            }
-        }
-
-        $this->config['db_table'] = $this->db_table = $table;
+        if(!$table_exists) $this->create_db_table();
 
         $this->initialise(true);
+    }
+
+    private function create_db_table() {
+        // create a db table with column for each input and output variable
+        $sql = "CREATE TABLE `".$this->db_table."` ( `id` INT NOT NULL AUTO_INCREMENT, `Name` VARCHAR(100) NOT NULL DEFAULT '' , ";
+        foreach(array_merge($this->config['input_variables'], $this->config['output_variables']) as $column) {
+            $sql .= "`$column` DECIMAL(20,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0 , ";
+        }
+        $sql .= "`".$this->comparison['code']."` DECIMAL(20,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
+
+        if ($this->db->query($sql) !== true) {
+            echo "Error: $sql <br>" . $this->db->error . "\n\n";
+            exit;
+        }
     }
 
     private function load_config() {
@@ -93,6 +96,23 @@ class GetChem {
         ini_set('memory_limit', $this->config['memory_limit']);
 
         $this->config['db_table'] = $this->db_table;
+
+        $comparison_modes = [
+            'dissimilarity_index' => [
+                'name' => 'Dissimilarity Index',
+                'code' => 'Dissimilarity'
+            ],
+            'euclidean_distance' => [
+                'name' => 'Euclidean Distance',
+                'code' => 'EucDist'
+            ]
+        ];
+
+        if(array_key_exists($this->config['comparison'], $comparison_modes)) {
+            $this->comparison = $comparison_modes[$this->config['comparison']];
+        } else {
+            $this->comparison = reset($comparison_modes);
+        }
     }
 
     private function initialise($first=false) {
@@ -325,17 +345,13 @@ class GetChem {
         if( !$this->get_confirmation('Database table '.$this->config['db_table'].' will be truncated.') )
             return false;
 
-        // clean-up db table
-        $sql = "TRUNCATE TABLE ".$this->config['db_table'].";";
+        // re-create db table (clean slate)
+        $sql = "DROP TABLE ".$this->config['db_table'].";";
         if ($this->db->query($sql) !== true) {
             echo "Error: $sql <br>" . $this->db->error . "\n\n";
             exit;
         }
-        $sql = "ALTER TABLE ".$this->config['db_table']." AUTO_INCREMENT = 1;";
-        if ($this->db->query($sql) !== true) {
-            echo "Error: $sql <br>" . $this->db->error . "\n\n";
-            exit;
-        }
+        $this->create_db_table();
 
         // insert combinations into DB
         $this->combinations_to_db();
@@ -432,7 +448,7 @@ class GetChem {
         return true;
     }
 
-    public function calculate_eudist() {
+    public function calculate_comparison() {
 
         if( !$this->get_confirmation('This may take a while.') )
             return false;
@@ -445,18 +461,12 @@ class GetChem {
             return false;
         }
 
-        $this->reset_timer('Calculating Euclidean Distances');
+        $this->reset_timer('Calculating '.$this->comparison['name']);
 
         $count = count($this->predictions[reset($this->config['output_variables'])]);
-        $benchmark = end($this->benchmark_data);
 
-        for($i=0; $i<$count; $i++) {
-            $sum = 0;
-            foreach($this->config['output_variables'] as $prediction) {
-                $sum += pow( $this->normalise($prediction, $this->predictions[$prediction][$i]) - $this->normalise($prediction, $benchmark[$prediction]) ,2);
-            }
-            $this->predictions['EucDist'][$i] = sqrt($sum);
-        }
+        $calcMethod = 'calculate_' . $this->comparison['code'];
+        $this->$calcMethod($count); // call dynamic comparison calculation method
 
         $this->get_timer();
 
@@ -483,6 +493,32 @@ class GetChem {
         return true;
     }
 
+    private function calculate_EucDist($count) {
+        $benchmark = end($this->benchmark_data);
+
+        for($i=0; $i<$count; $i++) {
+            $sum = 0;
+            foreach($this->config['output_variables'] as $prediction) {
+                $sum += pow( $this->normalise($prediction, $this->predictions[$prediction][$i]) - $this->normalise($prediction, $benchmark[$prediction]) ,2);
+            }
+            $this->predictions[$this->comparison['code']][$i] = sqrt($sum);
+        }
+    }
+
+    private function calculate_Dissimilarity($count) {
+        $benchmark = end($this->benchmark_data);
+
+        for($i=0; $i<$count; $i++) {
+            $sum1 = 0;
+            $sum2 = 0;
+            foreach($this->config['output_variables'] as $prediction) {
+                $sum1 += abs( $this->normalise($prediction, $benchmark[$prediction]) - $this->normalise($prediction, $this->predictions[$prediction][$i]) );
+                $sum2 += $this->normalise($prediction, $benchmark[$prediction]) + $this->normalise($prediction, $this->predictions[$prediction][$i]);
+            }
+            $this->predictions[$this->comparison['code']][$i] = $sum1 / $sum2;
+        }
+    }
+
     private function normalise($prediction, $value) {
         switch ($this->config['normalisation']) {
             case 'rescaling':
@@ -495,6 +531,10 @@ class GetChem {
 
             case 'standardization':
                 return $value / $this->norm['sd'][$prediction];
+                break;
+
+            default:
+                return $value;
                 break;
         }
     }
@@ -540,13 +580,19 @@ class GetChem {
                 $this->predictions[$prediction][] = $row[$prediction];
             }
 
-            // get min/max for data normalisation
-            $this->norm['min'][$prediction] = min($this->predictions[$prediction]);
-            $this->norm['max'][$prediction] = max($this->predictions[$prediction]);
+            switch ($this->config['normalisation']) {
+                case 'rescaling':
+                    // get min/max for data normalisation
+                    $this->norm['min'][$prediction] = min($this->predictions[$prediction]);
+                    $this->norm['max'][$prediction] = max($this->predictions[$prediction]);
+                    break;
 
-            // get mean average and standard deviation for data normalisation
-            $this->norm['mean'][$prediction] = $this->mean($this->predictions[$prediction]);
-            $this->norm['sd'][$prediction] = $this->standard_deviation($this->predictions[$prediction], $this->norm['mean'][$prediction]);
+                case 'standardization':
+                    // get mean average and standard deviation for data normalisation
+                    $this->norm['mean'][$prediction] = $this->mean($this->predictions[$prediction]);
+                    $this->norm['sd'][$prediction] = $this->standard_deviation($this->predictions[$prediction], $this->norm['mean'][$prediction]);
+                    break;
+            }
 
             $this->get_timer();
         }
@@ -585,14 +631,14 @@ class GetChem {
         echo "\n\033[33mNumber of $type results to be exported: \033[0m";
         while($input = fgets(STDIN)){
             if (intval($input)) {
-                $selectFields = "Name, CONCAT('".$this->config['db_table'].".', id) as ID, ".implode(', ', array_merge($this->config['input_variables'], $this->config['output_variables'])).", EucDist";
+                $selectFields = "Name, CONCAT('".$this->config['db_table'].".', id) as ID, ".implode(', ', array_merge($this->config['input_variables'], $this->config['output_variables'])).", ".$this->comparison['code'];
                 if($benchmark) {
-                    $sql = "(SELECT $selectFields FROM " . $this->config['db_table'] . " WHERE Name = '' ORDER BY EucDist ".$order[$type]." LIMIT " . intval($input) . ")";
+                    $sql = "(SELECT $selectFields FROM " . $this->config['db_table'] . " WHERE Name = '' ORDER BY ".$this->comparison['code']." ".$order[$type]." LIMIT " . intval($input) . ")";
                     $sql .= " UNION ALL ";
                     $sql .= "(SELECT $selectFields FROM " . $this->config['db_table'] . " WHERE Name <> '')";
-                    $sql .= " ORDER BY IF(Name <> '', 0, 1) ASC, EucDist " . $order[$type] . ";";
+                    $sql .= " ORDER BY IF(Name <> '', 0, 1) ASC, ".$this->comparison['code']." " . $order[$type] . ";";
                 } else {
-                    $sql = "SELECT $selectFields FROM ".$this->config['db_table']." ORDER BY EucDist ".$order[$type]." LIMIT ".intval($input).";";
+                    $sql = "SELECT $selectFields FROM ".$this->config['db_table']." ORDER BY ".$this->comparison['code']." ".$order[$type]." LIMIT ".intval($input).";";
                 }
                 break;
             } else {
