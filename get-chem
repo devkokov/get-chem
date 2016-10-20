@@ -79,9 +79,9 @@ class GetChem {
         // create a db table with column for each input and output variable
         $sql = "CREATE TABLE `".$this->db_table."` ( `id` INT NOT NULL AUTO_INCREMENT, `Name` VARCHAR(100) NOT NULL DEFAULT '' , ";
         foreach(array_merge($this->config['input_variables'], $this->config['output_variables']) as $column) {
-            $sql .= "`$column` DECIMAL(20,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0 , ";
+            $sql .= "`$column` DECIMAL(65,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0 , ";
         }
-        $sql .= "`".$this->comparison['code']."` DECIMAL(20,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
+        $sql .= "`".$this->comparison['code']."` DECIMAL(65,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
 
         if ($this->db->query($sql) !== true) {
             echo "Error: $sql <br>" . $this->db->error . "\n\n";
