@@ -78,10 +78,13 @@ class GetChem {
     private function create_db_table() {
         // create a db table with column for each input and output variable
         $sql = "CREATE TABLE `".$this->db_table."` ( `id` INT NOT NULL AUTO_INCREMENT, `Name` VARCHAR(100) NOT NULL DEFAULT '' , ";
-        foreach(array_merge($this->config['input_variables'], $this->config['output_variables']) as $column) {
-            $sql .= "`$column` DECIMAL(65,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0 , ";
+        foreach($this->config['input_variables'] as $column) {
+            $sql .= "`$column` DECIMAL(65,".$this->config['decimal_precision']['inputs'].") NOT NULL DEFAULT 0 , ";
         }
-        $sql .= "`".$this->comparison['code']."` DECIMAL(65,".$this->config['decimal_precision'].") NOT NULL DEFAULT 0, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
+        foreach($this->config['output_variables'] as $column) {
+            $sql .= "`$column` DECIMAL(65,".$this->config['decimal_precision']['outputs'].") NOT NULL DEFAULT 0 , ";
+        }
+        $sql .= "`".$this->comparison['code']."` DECIMAL(65,".$this->config['decimal_precision']['comparison_results'].") NOT NULL DEFAULT 0, PRIMARY KEY (`id`) ) ENGINE = MyISAM;";
 
         if ($this->db->query($sql) !== true) {
             echo "Error: $sql <br>" . $this->db->error . "\n\n";
@@ -198,13 +201,13 @@ class GetChem {
             $iteration = $properties['start'];
 
             while(true) {
-                $this->input_values[$name][] = round($iteration, $this->config['decimal_precision']);
+                $this->input_values[$name][] = round($iteration, $this->config['decimal_precision']['inputs']);
                 $iteration += $properties['step'];
 
                 if(!$properties['overflow'] && $iteration > $properties['end']) break;
 
                 if( abs($properties['end'] - $iteration) <= ($properties['step'] / 2) ) {
-                    $this->input_values[$name][] = round($iteration, $this->config['decimal_precision']);
+                    $this->input_values[$name][] = round($iteration, $this->config['decimal_precision']['inputs']);
                     break;
                 }
 
