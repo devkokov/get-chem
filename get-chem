@@ -667,16 +667,18 @@ class GetChem {
         }
         $data = rtrim($data, ',');
 
+        $fp = fopen($fileName, "w");
+        fwrite($fp, $data);
+
         while ($row = $result->fetch_row()) {
-            $data .= "\n";
+            $data = "\n";
             foreach($row as $col) {
                 $data .= $col.',';
             }
             $data = rtrim($data,',')."\n";
+            fwrite($fp, $data);
         }
 
-        $fp = fopen($fileName, "w");
-        fwrite($fp, $data);
         fclose($fp);
 
         $this->get_timer();
