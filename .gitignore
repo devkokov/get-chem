@@ -1,0 +1,9 @@
+config/*
+exports/*
+library/*
+temp/*
+.idea/*
+
+!.gitkeep
+!get-chem.sample.ini
+!benchmark.sample.csv
