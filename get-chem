@@ -94,7 +94,7 @@ class GetChem {
 
     private function load_config() {
         // get config from ini file
-        $this->config = parse_ini_file('config/get-chem.ini', true);
+        $this->config = parse_ini_file( ($this->isWindows ? $this->config['get_chem_install_path'] : '') . 'config/get-chem.ini', true);
 
         ini_set('memory_limit', $this->config['memory_limit']);
 
@@ -314,9 +314,9 @@ class GetChem {
         $this->combinations_count = count($this->combinations_array);
 
         // create a copy of the config file
-        $configCopy = 'config/get-chem-'.$this->db_table.'.ini';
+        $configCopy = ($this->isWindows ? $this->config['get_chem_install_path'] : '') . 'config/get-chem-'.$this->db_table.'.ini';
         if(file_exists($configCopy)) unlink($configCopy);
-        copy('config/get-chem.ini', $configCopy);
+        copy( ($this->isWindows ? $this->config['get_chem_install_path'] : '') .'config/get-chem.ini', $configCopy);
 
         $this->get_timer('Generated '.$this->combinations_count.' combinations');
 
@@ -443,7 +443,7 @@ class GetChem {
         putenv('CLASSPATH='.$this->config['WEKA_install_path']); // make sure WEKA's jar is in ClassPath
         foreach($this->config['output_variables'] as $prediction) {
             $this->reset_timer("Calculating $prediction predictions");
-            $cmd = 'java weka.filters.supervised.attribute.AddClassification -serialized '.$this->config['WEKA_models_path'].$prediction.'.model -remove-old-class -classification -i '.$this->config['csv_inputs_path'].$prediction.'.csv -o '.$this->config['csv_outputs_path'].$prediction.'.csv -c 9';
+            $cmd = 'java weka.filters.supervised.attribute.AddClassification -serialized '.$this->config['WEKA_models_path'].$prediction.'.model -remove-old-class -classification -i '.$this->config['csv_inputs_path'].$prediction.'.csv -o '.$this->config['csv_outputs_path'].$prediction.'.csv -c ' . ( count($this->config['input_variables']) + 1);
             shell_exec($cmd);
             $this->get_timer();
         }
