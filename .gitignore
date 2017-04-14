@@ -7,3 +7,5 @@ temp/*
 !.gitkeep
 !get-chem.sample.ini
 !benchmark.sample.csv
+Vagrantfile
+.vagrant
