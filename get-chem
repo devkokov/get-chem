@@ -573,14 +573,21 @@ class GetChem {
             }
             $file = array_values($file);
 
-            $this->predictions[$prediction] = array_map(function($line) {
+            // we will be weighting all output values, including benchmarks
+            $weight = $this->config['output_values_settings'][$prediction]['weight'];
+
+            $this->predictions[$prediction] = array_map(function($line) use ($prediction, $weight) {
                 $line = explode(',', $line);
-                return floatval(end($line));
+                $value = floatval(end($line));
+                $weighted = eval('return '.$value.$weight.';');
+                return $weighted;
             }, $file);
 
-            // add benchmark data
-            foreach($this->benchmark_data as $row) {
-                $this->predictions[$prediction][] = $row[$prediction];
+            // update benchmark array with weighted values
+            // add benchmark data to predictions array
+            foreach($this->benchmark_data as $key => $row) {
+                $benchmark_val = eval('return '.$row[$prediction].$weight.';');
+                $this->predictions[$prediction][] = $this->benchmark_data[$key][$prediction] = $benchmark_val;
             }
 
             switch ($this->config['normalisation']) {
