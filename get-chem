@@ -19,8 +19,11 @@ class GetChem {
     var $config;
     var $timer;
     var $input_values;
+    var $input_values_transformed;
     var $combinations_array;
+    var $combinations_array_transformed;
     var $combinations_string;
+    var $combinations_string_transformed;
     var $combinations_count;
     var $benchmark_data;
     var $predictions;
@@ -215,6 +218,16 @@ class GetChem {
             }
         }
 
+        if ($this->config['input_transformation'] == "rescale_100") {
+            foreach ($this->input_values as $name => $values) {
+                $min = min($values);
+                $max = max($values);
+                foreach ($values as $value) {
+                    $this->input_values_transformed[$name][] = round( (($value - $min) / ($max - $min)) * 100 , $this->config['decimal_precision']['inputs'] );
+                }
+            }
+        }
+
         $this->get_timer();
 
         return true;
@@ -267,6 +280,12 @@ class GetChem {
 
         $this->output_value_matrix($this->input_values);
 
+        if ($this->config['input_transformation'] == 'rescale_100') {
+
+            echo "\nTransformed input values:\n";
+            $this->output_value_matrix($this->input_values_transformed);
+        }
+
         return true;
     }
 
@@ -298,6 +317,7 @@ class GetChem {
     }
 
     public function generate_combinations() {
+
         if(empty($this->input_values)) {
             echo "Input values array is empty. You need to run generate_input_values first!\n";
             return false;
@@ -312,6 +332,15 @@ class GetChem {
 
         $this->combinations_array = $this->recursive_combinations($combinationsInput);
         $this->combinations_count = count($this->combinations_array);
+
+        if ($this->config['input_transformation'] == 'rescale_100') {
+            $combinationsInput = [];
+            foreach($this->input_values_transformed as $valueTypeArray) {
+                $combinationsInput[] = $valueTypeArray;
+            }
+
+            $this->combinations_array_transformed = $this->recursive_combinations($combinationsInput);
+        }
 
         // create a copy of the config file
         $configCopy = ($this->isWindows ? $this->config['get_chem_install_path'] : '') . 'config/get-chem-'.$this->db_table.'.ini';
@@ -412,7 +441,7 @@ class GetChem {
         $this->reset_timer('Converting combinations to CSV format');
         $this->combinations_string = implode("\n", array_map(function($arr) {
             return implode(',', $arr).',0'; // the appended 0 is a placeholder for WEKA's predictions
-        }, $this->combinations_array));
+        }, ( $this->config['input_transformation'] == 'rescale_100' ? $this->combinations_array_transformed : $this->combinations_array ) ));
         $this->get_timer();
 
         return true;
@@ -578,9 +607,30 @@ class GetChem {
                 return floatval(end($line));
             }, $file);
 
+            switch ($this->config['input_transformation']) {
+                case 'rescale_100':
+                    $max = $this->config['output_values_settings'][$prediction]['max'];
+                    $min = $this->config['output_values_settings'][$prediction]['min'];
+                    $weight = $this->config['output_values_settings'][$prediction]['weight'];
+
+                    $this->predictions[$prediction] = array_map(function($predictionVal) use ($min, $max, $weight) {
+                        $descaled = ($predictionVal / 100) * ($max - $min) + $min;
+                        $weighted = eval('return '.$descaled.$weight.';');
+                        return $weighted;
+                    }, $this->predictions[$prediction]);
+                    break;
+            }
+
             // add benchmark data
-            foreach($this->benchmark_data as $row) {
-                $this->predictions[$prediction][] = $row[$prediction];
+            foreach($this->benchmark_data as $key => $row) {
+                if ($this->config['input_transformation'] == 'rescale_100') {
+                    $weight = $this->config['output_values_settings'][$prediction]['weight'];
+                    $benchmark_val = eval('return '.$row[$prediction].$weight.';');
+                } else {
+                    $benchmark_val = $row[$prediction];
+                }
+
+                $this->benchmark_data[$key][$prediction] = $this->predictions[$prediction][] = $benchmark_val;
             }
 
             switch ($this->config['normalisation']) {
